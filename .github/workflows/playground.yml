@@ -7,6 +7,8 @@ on:
   workflow_dispatch:
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SCITER_RUST_VERSION: "1.75"
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
@@ -31,6 +33,7 @@ env:
 
 jobs:
   build-for-macOS:
+    if: false
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
