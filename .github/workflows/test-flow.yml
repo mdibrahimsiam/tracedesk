@@ -1,0 +1,204 @@
+name: TraceDesk Test Build (Windows + Linux)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # allows manual trigger from GitHub Actions tab
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  LLVM_VERSION: "15.0.6"
+
+# Cancel previous runs on the same branch to save runner minutes
+concurrency:
+  group: tracedesk-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ─────────────────────────────────────────────
+  # JOB 1: Linux x86_64  (Ubuntu 22.04)
+  # Produces: tracedesk-linux-x86_64.deb
+  # ─────────────────────────────────────────────
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            git \
+            g++ \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            libclang-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgtk-3-dev \
+            libpam0g-dev \
+            libpulse-dev \
+            libxcb-randr0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxdo-dev \
+            libxfixes-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: rustfmt
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-x86_64-rust-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            linux-x86_64-rust-
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            flutter/.dart_tool
+            flutter/build
+          key: linux-flutter-${{ hashFiles('flutter/pubspec.lock') }}
+          restore-keys: |
+            linux-flutter-
+
+      - name: Flutter doctor check
+        run: flutter doctor -v
+
+      - name: Build TraceDesk (Rust only — no vcpkg)
+        run: |
+          cargo build --release \
+            --features flutter \
+            --target x86_64-unknown-linux-gnu
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: Show build output
+        run: |
+          echo "=== Build artifacts ==="
+          ls -lh target/x86_64-unknown-linux-gnu/release/ | grep -E "^-.*rustdesk|tracedesk" || true
+          echo "=== Done ==="
+
+      - name: Upload Linux build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracedesk-linux-x86_64
+          path: target/x86_64-unknown-linux-gnu/release/rustdesk
+          retention-days: 7
+          if-no-files-found: warn
+
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Windows x86_64  (Windows Server 2022)
+  # Produces: rustdesk.exe  (portable, no installer)
+  # No vcpkg, no signing, no MSI — just the exe
+  # ─────────────────────────────────────────────
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: windows-2022
+    steps:
+
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-x86_64-rust-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            windows-x86_64-rust-
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            flutter/.dart_tool
+          key: windows-flutter-${{ hashFiles('flutter/pubspec.lock') }}
+          restore-keys: |
+            windows-flutter-
+
+      - name: Flutter doctor check
+        run: flutter doctor -v
+
+      - name: Build TraceDesk (Rust only — no vcpkg)
+        shell: bash
+        run: |
+          cargo build --release \
+            --features flutter \
+            --target x86_64-pc-windows-msvc
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: Show build output
+        shell: bash
+        run: |
+          echo "=== Build artifacts ==="
+          ls -lh target/x86_64-pc-windows-msvc/release/*.exe 2>/dev/null || echo "No .exe found yet"
+          echo "=== Done ==="
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracedesk-windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/rustdesk.exe
+          retention-days: 7
+          if-no-files-found: warn
