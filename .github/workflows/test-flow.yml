@@ -61,6 +61,20 @@ jobs:
             pkg-config \
             wget
 
+
+      # - name: Setup vcpkg with Github Actions binary cache
+      #   uses: lukka/run-vcpkg@v11
+      #   with:
+      #     vcpkgDirectory: /opt/artifacts/vcpkg # (Use C:\vcpkg for the Windows job)
+      #     vcpkgGitCommitId: "120deac3062162151622ca4860575a33844ba10b"
+
+      # - name: Install vcpkg dependencies
+      #   run: |
+      #     $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+      #   shell: bash
+
+
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -138,9 +152,21 @@ jobs:
           submodules: recursive
 
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
+        uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
+
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: "120deac3062162151622ca4860575a33844ba10b"
+
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+        shell: bash
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
